@@ -251,19 +251,13 @@ def main():
             create_streamlit_line_chart(df_commodity, "Commodity")
         with col2:
             create_streamlit_line_chart(df_country, "Country")
-        
-        st.markdown("---")
-        st.header("🗺️ Global Export Distribution")
-        world_map = create_world_map(df_country, selected_year)
-        if world_map:
-            st.plotly_chart(world_map, use_container_width=True)
 
     elif analysis_type == "🏭 Commodity Analysis":
         st.header("🏭 Commodity Export Analysis")
         filtered_df = df_commodity.copy()
         if commodity_filter:
             filtered_df = filtered_df[filtered_df['description'].isin(commodity_filter)]
-        
+
         if current_year_col in filtered_df.columns and not filtered_df.empty:
             st.subheader(f"📈 Distribusi Persentase Top {top_n_commodities} Komoditas ({selected_year})")
             donut_fig = create_donut_chart_with_total(
@@ -273,9 +267,25 @@ def main():
             if donut_fig:
                 st.plotly_chart(donut_fig, use_container_width=True)
             st.markdown("---")
+
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                create_streamlit_bar_chart(
+                    filtered_df, current_year_col, 'description',
+                    f'Top {top_n_commodities} Komoditas Ekspor ({selected_year})', top_n_commodities
+                )
+            with col2:
+                st.subheader("📊 Ringkasan Statistik")
+                total_export = filtered_df[current_year_col].sum()
+                avg_export = filtered_df[current_year_col].mean()
+                max_export = filtered_df[current_year_col].max()
+                st.metric("Total Export", format_number(total_export))
+                st.metric("Average Export", format_number(avg_export))
+                st.metric("Highest Export", format_number(max_export))
+                
             create_data_table(
                 filtered_df, current_year_col, 'description',
-                f"Detailed Commodity Data ({selected_year})", top_n_commodities
+                f"Data Detail Komoditas ({selected_year})", top_n_commodities
             )
         else:
             st.warning("Tidak ada data untuk ditampilkan dengan filter yang dipilih.")
@@ -295,14 +305,47 @@ def main():
             if donut_fig:
                 st.plotly_chart(donut_fig, use_container_width=True)
             st.markdown("---")
+
             st.subheader(f"🗺️ Peta Distribusi Ekspor Global ({selected_year})")
             world_map_fig = create_world_map(df_country, selected_year, highlighted_countries=country_filter)
             if world_map_fig:
                 st.plotly_chart(world_map_fig, use_container_width=True)
             st.markdown("---")
+
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                create_streamlit_bar_chart(
+                    filtered_df, current_year_col, 'country',
+                    f'Top {top_n_countries} Negara Tujuan ({selected_year})', top_n_countries
+                )
+            with col2:
+                st.subheader("📊 Ringkasan Statistik")
+                total_export = filtered_df[current_year_col].sum()
+                avg_export = filtered_df[current_year_col].mean()
+                max_export = filtered_df[current_year_col].max()
+                st.metric("Total Export", format_number(total_export))
+                st.metric("Average Export", format_number(avg_export))
+                st.metric("Highest Export", format_number(max_export))
+
+            # Analisis Regional
+            st.subheader("🗺️ Distribusi Regional")
+            regional_mapping = {
+                'CHINA': 'Asia', 'UNITED STATES': 'North America', 'INDIA': 'Asia', 'SINGAPORE': 'Asia',
+                'MALAYSIA': 'Asia', 'THAILAND': 'Asia', 'VIETNAM': 'Asia', 'PHILIPPINES': 'Asia',
+                'SOUTH KOREA': 'Asia', 'JAPAN': 'Asia', 'NETHERLANDS': 'Europe', 'GERMANY': 'Europe',
+                'ITALY': 'Europe', 'SPAIN': 'Europe', 'FRANCE': 'Europe', 'UNITED KINGDOM': 'Europe',
+                'BRAZIL': 'South America', 'ARGENTINA': 'South America', 'AUSTRALIA': 'Oceania'
+            }
+            # Gunakan df_country agar regional tidak terpengaruh filter
+            regional_df = df_country.copy()
+            regional_df['region'] = regional_df['country'].map(regional_mapping).fillna('Other')
+            regional_data = regional_df.groupby('region')[current_year_col].sum().sort_values(ascending=False).reset_index()
+            regional_data['Export Value'] = regional_data[current_year_col].apply(format_number)
+            st.dataframe(regional_data[['Region', 'Export Value']], use_container_width=True, hide_index=True)
+
             create_data_table(
                 filtered_df, current_year_col, 'country',
-                f"Detailed Country Data ({selected_year})", top_n_countries
+                f"Data Detail Negara ({selected_year})", top_n_countries
             )
         else:
             st.warning("Tidak ada data untuk ditampilkan dengan filter yang dipilih.")
