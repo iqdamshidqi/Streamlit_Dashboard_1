@@ -133,6 +133,50 @@ def create_streamlit_line_chart(data, data_type="commodity"):
     
     return trend_df
 
+def get_iso_a3(country_name):
+    """Convert country name to ISO Alpha-3 code"""
+    if not PYCOUNTRY_AVAILABLE:
+        return None
+        
+    country_mapping = {
+        'REPUBLIC OF CHINA': 'CHN',
+        'UNITED STATES': 'USA',
+        'SOUTH KOREA': 'KOR',
+        'UNITED KINGDOM': 'GBR',
+        'RUSSIAN FEDERATION': 'RUS',
+        'CZECH REPUBLIC': 'CZE',
+        'BOLIVIA': 'BOL',
+        'VENEZUELA': 'VEN',
+        'IRAN': 'IRN',
+        "LAO PEOPLE'S DEMOCRATIC REPUBLIC": 'LAO',
+        'MOLDOVA': 'MDA',
+        'SYRIA': 'SYR',
+        'TANZANIA': 'TZA',
+        'VIETNAM': 'VNM',
+        'BRUNEI DARUSSALAM': 'BRN',
+        'CABO VERDE': 'CPV',
+        'CONGO': 'COG',
+        'DEMOCRATIC REPUBLIC OF THE CONGO': 'COD',
+        'EGYPT': 'EGY',
+        'GAMBIA': 'GMB',
+        'GUINEA BISSAU': 'GNB',
+        'SAO TOME AND PRINCIPE': 'STP',
+        'SWAZILAND': 'SWZ',
+        'UNITED ARAB EMIRATES': 'ARE',
+        'YEMEN': 'YEM',
+        'NORTH MACEDONIA': 'MKD',
+        'PALESTINE': 'PSE',
+        "KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF": 'PRK'
+    }
+    
+    if country_name in country_mapping:
+        return country_mapping[country_name]
+    
+    try:
+        return pycountry.countries.search_fuzzy(country_name)[0].alpha_3
+    except LookupError:
+        return None
+
 def create_data_table(data, value_col, label_col, title, top_n=10):
     """Create formatted data table"""
     top_data = data.nlargest(top_n, value_col)
@@ -163,6 +207,33 @@ def calculate_growth_rate(current, previous):
     if previous == 0 or pd.isna(previous) or pd.isna(current):
         return 0
     return ((current - previous) / previous) * 100
+
+def create_world_map(df_country):
+    """Create world map visualization"""
+    if not PLOTLY_AVAILABLE or not PYCOUNTRY_AVAILABLE:
+        st.warning("World map requires plotly and pycountry libraries")
+        return None
+        
+    # Add ISO codes
+    df_country['iso_a3'] = df_country['country'].apply(get_iso_a3)
+    df_map = df_country.dropna(subset=['iso_a3'])
+    
+    fig = px.choropleth(
+        df_map,
+        locations="iso_a3",
+        color="export_value_2024",
+        hover_name="country",
+        hover_data={"export_value_2024": ":,.0f"},
+        color_continuous_scale="plasma",
+        title="Export Distribution by Country (2024)"
+    )
+    
+    fig.update_layout(
+        geo=dict(showframe=False, showcoastlines=True),
+        height=500
+    )
+    
+    return fig
 
 def main():
     # Header
@@ -274,6 +345,15 @@ def main():
                     f"Top 5 Countries ({selected_year})",
                     5
                 )
+
+    # World map
+        st.header("🗺️ Global Export Distribution")
+        world_map = create_world_map(df_country)
+        if world_map:
+            if PLOTLY_AVAILABLE:
+                st.plotly_chart(world_map, use_container_width=True)
+            else:
+                st.pyplot(world_map)
     
     elif analysis_type == "🏭 Commodity Analysis":
         st.header("🏭 Commodity Export Analysis")
