@@ -28,9 +28,9 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 8rem;
         font-weight: bold;
-        color: #1f77b4;
+        color: #fffff;
         text-align: center;
         margin-bottom: 2rem;
     }
@@ -210,7 +210,7 @@ def create_donut_chart_with_total(data, values_col, names_col, title, top_n=10):
 # --- Aplikasi Utama ---
 
 def main():
-    st.markdown('<p class="main-header">🇮🇩 Indonesia Non-Oil Export Dashboard</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">Indonesia Non-Oil Export Dashboard</p>', unsafe_allow_html=True)
 
     df_commodity, df_country = load_data()
     if df_commodity is None or df_country is None:
@@ -402,8 +402,8 @@ def main():
         """
         <div style='text-align: center'>
             <p><strong>📊 Indonesia Non-Oil Export Dashboard</strong></p>
-            <p>Data source: Ministry of Trade, Republic of Indonesia (mock data)</p>
-            <p>Built with ❤️ using Streamlit</p>
+            <p>Data source: satudata.kemendag.go.id</p>
+            <p>Built by: Iqdam Shidqi</p>
         </div>
         """,
         unsafe_allow_html=True
