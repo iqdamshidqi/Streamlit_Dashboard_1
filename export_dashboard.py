@@ -141,6 +141,11 @@ def create_streamlit_line_chart(data, data_type="commodity"):
             trend_data[years[i]] = 0
     
     trend_df = pd.DataFrame(list(trend_data.items()), columns=['Year', 'Export_Value'])
+    
+    # -- TAMBAHKAN BARIS INI --
+    # Ubah tipe data kolom 'Year' menjadi string untuk format yang benar
+    trend_df['Year'] = trend_df['Year'].astype(str)
+    
     trend_df = trend_df.set_index('Year')
     
     st.subheader(f'Export Trend Over Time - {data_type.title()}')
