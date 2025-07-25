@@ -2,6 +2,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+# Check for optional dependencies
+try:
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+
+try:
+    import pycountry
+    PYCOUNTRY_AVAILABLE = True
+except ImportError:
+    PYCOUNTRY_AVAILABLE = False
+
 # Page configuration
 st.set_page_config(
     page_title="Indonesia Non-Oil Export Dashboard",
@@ -9,6 +22,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
 
 # Custom CSS for better styling
 st.markdown("""
