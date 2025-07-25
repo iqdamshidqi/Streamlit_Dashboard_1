@@ -478,8 +478,6 @@ def main():
         else:
             st.warning(f"Tidak ada data untuk ditampilkan pada tahun {selected_year} dengan filter yang dipilih.")
 
-    elif analysis_type == "🌍 Country Analysis":
-        # ... (lanjutan kode Anda)
     
     elif analysis_type == "🌍 Country Analysis":
         st.header("🌍 Country Export Analysis")
