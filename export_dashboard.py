@@ -1,10 +1,25 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import pycountry
 import numpy as np
+
+# Try to import plotly, fallback to matplotlib if not available
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    PLOTLY_AVAILABLE = False
+    st.warning("Plotly not available, using matplotlib as fallback")
+
+try:
+    import pycountry
+    PYCOUNTRY_AVAILABLE = True
+except ImportError:
+    PYCOUNTRY_AVAILABLE = False
+    st.warning("pycountry not available, world map functionality will be limited")
 
 # Page configuration
 st.set_page_config(
@@ -101,6 +116,9 @@ def load_data():
 
 def get_iso_a3(country_name):
     """Convert country name to ISO Alpha-3 code"""
+    if not PYCOUNTRY_AVAILABLE:
+        return None
+        
     country_mapping = {
         'REPUBLIC OF CHINA': 'CHN',
         'UNITED STATES': 'USA',
@@ -153,66 +171,102 @@ def create_trend_chart(data, data_type="commodity"):
         else:
             total_exports.append(0)
     
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=years,
-        y=total_exports,
-        mode='lines+markers',
-        name=f'Total Export Value ({data_type.title()})',
-        line=dict(width=3, color='#1f77b4'),
-        marker=dict(size=8)
-    ))
-    
-    fig.update_layout(
-        title=f'Export Trend Over Time - {data_type.title()}',
-        xaxis_title='Year',
-        yaxis_title='Export Value (USD)',
-        hovermode='x unified',
-        showlegend=False
-    )
-    
-    return fig
+    if PLOTLY_AVAILABLE:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=years,
+            y=total_exports,
+            mode='lines+markers',
+            name=f'Total Export Value ({data_type.title()})',
+            line=dict(width=3, color='#1f77b4'),
+            marker=dict(size=8)
+        ))
+        
+        fig.update_layout(
+            title=f'Export Trend Over Time - {data_type.title()}',
+            xaxis_title='Year',
+            yaxis_title='Export Value (USD)',
+            hovermode='x unified',
+            showlegend=False
+        )
+        
+        return fig
+    else:
+        # Matplotlib fallback
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(years, total_exports, marker='o', linewidth=3, markersize=8, color='#1f77b4')
+        ax.set_title(f'Export Trend Over Time - {data_type.title()}')
+        ax.set_xlabel('Year')
+        ax.set_ylabel('Export Value (USD)')
+        ax.grid(True, alpha=0.3)
+        return fig
 
 def create_top_items_chart(data, value_col, label_col, title, top_n=10):
     """Create horizontal bar chart for top items"""
     top_data = data.nlargest(top_n, value_col)
     
-    fig = px.bar(
-        top_data,
-        x=value_col,
-        y=label_col,
-        orientation='h',
-        title=title,
-        color=value_col,
-        color_continuous_scale='viridis'
-    )
-    
-    fig.update_layout(
-        yaxis={'categoryorder': 'total ascending'},
-        showlegend=False,
-        height=500
-    )
-    
-    return fig
+    if PLOTLY_AVAILABLE:
+        fig = px.bar(
+            top_data,
+            x=value_col,
+            y=label_col,
+            orientation='h',
+            title=title,
+            color=value_col,
+            color_continuous_scale='viridis'
+        )
+        
+        fig.update_layout(
+            yaxis={'categoryorder': 'total ascending'},
+            showlegend=False,
+            height=500
+        )
+        
+        return fig
+    else:
+        # Matplotlib fallback
+        fig, ax = plt.subplots(figsize=(12, 8))
+        bars = ax.barh(top_data[label_col], top_data[value_col], color='#1f77b4')
+        ax.set_title(title)
+        ax.set_xlabel('Export Value (USD)')
+        
+        # Add value labels on bars
+        for i, bar in enumerate(bars):
+            width = bar.get_width()
+            ax.text(width, bar.get_y() + bar.get_height()/2, 
+                   f'{width:,.0f}', ha='left', va='center')
+        
+        plt.tight_layout()
+        return fig
 
 def create_pie_chart(data, values_col, names_col, title, top_n=10):
     """Create pie chart for distribution"""
     top_data = data.nlargest(top_n, values_col)
     
-    fig = px.pie(
-        top_data,
-        values=values_col,
-        names=names_col,
-        title=title,
-        color_discrete_sequence=px.colors.qualitative.Set3
-    )
-    
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-    
-    return fig
+    if PLOTLY_AVAILABLE:
+        fig = px.pie(
+            top_data,
+            values=values_col,
+            names=names_col,
+            title=title,
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        return fig
+    else:
+        # Matplotlib fallback
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.pie(top_data[values_col], labels=top_data[names_col], autopct='%1.1f%%', startangle=90)
+        ax.set_title(title)
+        return fig
 
 def create_world_map(df_country):
     """Create world map visualization"""
+    if not PLOTLY_AVAILABLE or not PYCOUNTRY_AVAILABLE:
+        st.warning("World map requires plotly and pycountry libraries")
+        return None
+        
     # Add ISO codes
     df_country['iso_a3'] = df_country['country'].apply(get_iso_a3)
     df_map = df_country.dropna(subset=['iso_a3'])
@@ -316,16 +370,26 @@ def main():
         
         with col1:
             commodity_trend = create_trend_chart(df_commodity, "commodity")
-            st.plotly_chart(commodity_trend, use_container_width=True)
+            if PLOTLY_AVAILABLE:
+                st.plotly_chart(commodity_trend, use_container_width=True)
+            else:
+                st.pyplot(commodity_trend)
         
         with col2:
             country_trend = create_trend_chart(df_country, "country")
-            st.plotly_chart(country_trend, use_container_width=True)
+            if PLOTLY_AVAILABLE:
+                st.plotly_chart(country_trend, use_container_width=True)
+            else:
+                st.pyplot(country_trend)
         
         # World map
         st.header("🗺️ Global Export Distribution")
         world_map = create_world_map(df_country)
-        st.plotly_chart(world_map, use_container_width=True)
+        if world_map:
+            if PLOTLY_AVAILABLE:
+                st.plotly_chart(world_map, use_container_width=True)
+            else:
+                st.pyplot(world_map)
     
     elif analysis_type == "Commodity Analysis":
         st.header("🏭 Commodity Export Analysis")
@@ -346,7 +410,10 @@ def main():
                 f'Top {top_n_commodities} Commodities Export ({selected_year})',
                 top_n_commodities
             )
-            st.plotly_chart(top_commodities_chart, use_container_width=True)
+            if PLOTLY_AVAILABLE:
+                st.plotly_chart(top_commodities_chart, use_container_width=True)
+            else:
+                st.pyplot(top_commodities_chart)
             
             # Pie chart
             col1, col2 = st.columns(2)
@@ -359,7 +426,10 @@ def main():
                     f'Export Distribution by Commodity ({selected_year})',
                     top_n_commodities
                 )
-                st.plotly_chart(pie_chart, use_container_width=True)
+                if PLOTLY_AVAILABLE:
+                    st.plotly_chart(pie_chart, use_container_width=True)
+                else:
+                    st.pyplot(pie_chart)
             
             with col2:
                 # Data table
@@ -388,7 +458,10 @@ def main():
                 f'Top {top_n_countries} Export Destinations ({selected_year})',
                 top_n_countries
             )
-            st.plotly_chart(top_countries_chart, use_container_width=True)
+            if PLOTLY_AVAILABLE:
+                st.plotly_chart(top_countries_chart, use_container_width=True)
+            else:
+                st.pyplot(top_countries_chart)
             
             # Pie chart and world map
             col1, col2 = st.columns(2)
@@ -401,7 +474,10 @@ def main():
                     f'Export Distribution by Country ({selected_year})',
                     top_n_countries
                 )
-                st.plotly_chart(pie_chart, use_container_width=True)
+                if PLOTLY_AVAILABLE:
+                    st.plotly_chart(pie_chart, use_container_width=True)
+                else:
+                    st.pyplot(pie_chart)
             
             with col2:
                 # Data table
