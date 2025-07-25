@@ -255,6 +255,45 @@ def create_world_map(df_country):
     
     return fig
 
+def create_donut_chart_with_total(data, values_col, names_col, title, top_n=10):
+    """Membuat donut chart dengan total nilai di tengah."""
+    if data.empty or values_col not in data.columns:
+        st.warning("Data tidak tersedia untuk membuat chart.")
+        return None
+
+    # Ambil data teratas dan hitung totalnya
+    top_data = data.nlargest(top_n, values_col)
+    total_value = top_data[values_col].sum()
+    formatted_total = format_number(total_value) # Menggunakan fungsi format_number yang sudah ada
+
+    # Buat donut chart menggunakan Plotly Express
+    fig = px.pie(
+        top_data,
+        values=values_col,
+        names=names_col,
+        title=title,
+        hole=0.4,  # Ini yang membuat chart menjadi donut
+        color_discrete_sequence=px.colors.qualitative.Pastel
+    )
+
+    # Atur agar label persentase berada di luar slice untuk keterbacaan
+    fig.update_traces(textposition='outside', textinfo='percent+label', pull=[0.02] * top_n)
+
+    # Tambahkan anotasi total nilai di tengah chart
+    fig.update_layout(
+        showlegend=False,
+        annotations=[
+            dict(
+                text=f"Total<br>{formatted_total}",
+                x=0.5,
+                y=0.5,
+                font_size=22,
+                showarrow=False
+            )
+        ]
+    )
+    return fig
+
 def main():
     # Header
     st.markdown('<p class="main-header">🇮🇩 Indonesia Non-Oil Export Dashboard</p>', unsafe_allow_html=True)
@@ -376,66 +415,65 @@ def main():
                 st.pyplot(world_map)
     
     elif analysis_type == "🏭 Commodity Analysis":
-        st.header("🏭 Commodity Export Analysis")
+    st.header("🏭 Commodity Export Analysis")
+    
+    # Filter data jika dibutuhkan
+    filtered_df = df_commodity.copy()
+    if commodity_filter:
+        filtered_df = filtered_df[filtered_df['description'].isin(commodity_filter)]
+    
+    current_year_col = f'export_value_{selected_year}'
+    
+    if current_year_col in filtered_df.columns and not filtered_df.empty:
         
-        # Filter data if needed
-        filtered_df = df_commodity.copy()
-        if commodity_filter:
-            filtered_df = filtered_df[filtered_df['description'].isin(commodity_filter)]
+        # --- BAGIAN DONUT CHART YANG BARU DITAMBAHKAN ---
+        st.subheader(f"📈 Distribusi Persentase Top {top_n_commodities} Komoditas ({selected_year})")
+        donut_fig = create_donut_chart_with_total(
+            filtered_df,
+            values_col=current_year_col,
+            names_col='description',
+            title=f"Pangsa Ekspor Top {top_n_commodities} Komoditas",
+            top_n=top_n_commodities
+        )
+        if donut_fig:
+            st.plotly_chart(donut_fig, use_container_width=True)
         
-        current_year_col = f'export_value_{selected_year}'
+        st.markdown("---") # Pemisah visual
+        # --- AKHIR BAGIAN BARU ---
+
+        # Bagian Bar Chart dan Tabel Data (yang sudah ada sebelumnya)
+        col1, col2 = st.columns([2, 1])
         
-        # Top commodities chart
-        if current_year_col in filtered_df.columns:
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                create_streamlit_bar_chart(
-                    filtered_df,
-                    current_year_col,
-                    'description',
-                    f'Top {top_n_commodities} Commodities Export ({selected_year})',
-                    top_n_commodities
-                )
-            
-            with col2:
-                # Summary statistics
-                st.subheader("📊 Summary Statistics")
-                total_export = filtered_df[current_year_col].sum()
-                avg_export = filtered_df[current_year_col].mean()
-                max_export = filtered_df[current_year_col].max()
-                
-                st.metric("Total Export", format_number(total_export))
-                st.metric("Average Export", format_number(avg_export))
-                st.metric("Highest Export", format_number(max_export))
-            
-            # Detailed data table
-            create_data_table(
+        with col1:
+            create_streamlit_bar_chart(
                 filtered_df,
                 current_year_col,
                 'description',
-                f"Detailed Commodity Data ({selected_year})",
+                f'Top {top_n_commodities} Komoditas Ekspor ({selected_year})',
                 top_n_commodities
             )
+        
+        with col2:
+            # Summary statistics
+            st.subheader("📊 Summary Statistics")
+            total_export = filtered_df[current_year_col].sum()
+            avg_export = filtered_df[current_year_col].mean()
+            max_export = filtered_df[current_year_col].max()
             
-            # Market share analysis
-            st.subheader("📈 Market Share Analysis")
-            top_data = filtered_df.nlargest(top_n_commodities, current_year_col)
-            
-            # Calculate market share
-            total_market = filtered_df[current_year_col].sum()
-            market_share_data = []
-            
-            for _, row in top_data.iterrows():
-                share = (row[current_year_col] / total_market) * 100
-                market_share_data.append({
-                    'Commodity': row['description'],
-                    'Export Value': format_number(row[current_year_col]),
-                    'Market Share (%)': f"{share:.1f}%"
-                })
-            
-            market_df = pd.DataFrame(market_share_data)
-            st.dataframe(market_df, use_container_width=True)
+            st.metric("Total Export", format_number(total_export))
+            st.metric("Average Export", format_number(avg_export))
+            st.metric("Highest Export", format_number(max_export))
+        
+        # Detailed data table (sudah ada)
+        create_data_table(
+            filtered_df,
+            current_year_col,
+            'description',
+            f"Detailed Commodity Data ({selected_year})",
+            top_n_commodities
+        )
+    else:
+        st.warning(f"Tidak ada data untuk ditampilkan pada tahun {selected_year} dengan filter yang dipilih.")
     
     elif analysis_type == "🌍 Country Analysis":
         st.header("🌍 Country Export Analysis")
