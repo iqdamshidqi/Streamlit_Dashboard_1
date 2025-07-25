@@ -2,25 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# Try to import plotly, fallback to matplotlib if not available
-try:
-    import plotly.express as px
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-    PLOTLY_AVAILABLE = True
-except ImportError:
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    PLOTLY_AVAILABLE = False
-    st.warning("Plotly not available, using matplotlib as fallback")
-
-try:
-    import pycountry
-    PYCOUNTRY_AVAILABLE = True
-except ImportError:
-    PYCOUNTRY_AVAILABLE = False
-    st.warning("pycountry not available, world map functionality will be limited")
-
 # Page configuration
 st.set_page_config(
     page_title="Indonesia Non-Oil Export Dashboard",
@@ -47,6 +28,13 @@ st.markdown("""
     }
     .sidebar .sidebar-content {
         background-color: #f8f9fa;
+    }
+    .chart-container {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 10px 0;
+        background-color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -114,179 +102,67 @@ def load_data():
         st.error(f"Error loading data: {str(e)}")
         return None, None
 
-def get_iso_a3(country_name):
-    """Convert country name to ISO Alpha-3 code"""
-    if not PYCOUNTRY_AVAILABLE:
-        return None
-        
-    country_mapping = {
-        'REPUBLIC OF CHINA': 'CHN',
-        'UNITED STATES': 'USA',
-        'SOUTH KOREA': 'KOR',
-        'UNITED KINGDOM': 'GBR',
-        'RUSSIAN FEDERATION': 'RUS',
-        'CZECH REPUBLIC': 'CZE',
-        'BOLIVIA': 'BOL',
-        'VENEZUELA': 'VEN',
-        'IRAN': 'IRN',
-        "LAO PEOPLE'S DEMOCRATIC REPUBLIC": 'LAO',
-        'MOLDOVA': 'MDA',
-        'SYRIA': 'SYR',
-        'TANZANIA': 'TZA',
-        'VIETNAM': 'VNM',
-        'BRUNEI DARUSSALAM': 'BRN',
-        'CABO VERDE': 'CPV',
-        'CONGO': 'COG',
-        'DEMOCRATIC REPUBLIC OF THE CONGO': 'COD',
-        'EGYPT': 'EGY',
-        'GAMBIA': 'GMB',
-        'GUINEA BISSAU': 'GNB',
-        'SAO TOME AND PRINCIPE': 'STP',
-        'SWAZILAND': 'SWZ',
-        'UNITED ARAB EMIRATES': 'ARE',
-        'YEMEN': 'YEM',
-        'NORTH MACEDONIA': 'MKD',
-        'PALESTINE': 'PSE',
-        "KOREA, DEMOCRATIC PEOPLE'S REPUBLIC OF": 'PRK'
-    }
+def create_streamlit_bar_chart(data, value_col, label_col, title, top_n=10):
+    """Create bar chart using Streamlit's native chart functions"""
+    top_data = data.nlargest(top_n, value_col).copy()
+    top_data = top_data.set_index(label_col)
     
-    if country_name in country_mapping:
-        return country_mapping[country_name]
+    st.subheader(title)
+    st.bar_chart(top_data[value_col])
     
-    try:
-        return pycountry.countries.search_fuzzy(country_name)[0].alpha_3
-    except LookupError:
-        return None
+    return top_data
 
-def create_trend_chart(data, data_type="commodity"):
-    """Create trend chart for export values over years"""
+def create_streamlit_line_chart(data, data_type="commodity"):
+    """Create line chart using Streamlit's native chart functions"""
     years = [2020, 2021, 2022, 2023, 2024]
     year_columns = [f'export_value_{year}' for year in years]
     
     # Calculate total exports per year
-    total_exports = []
-    for col in year_columns:
+    trend_data = {}
+    for i, col in enumerate(year_columns):
         if col in data.columns:
-            total_exports.append(data[col].sum())
+            trend_data[years[i]] = data[col].sum()
         else:
-            total_exports.append(0)
+            trend_data[years[i]] = 0
     
-    if PLOTLY_AVAILABLE:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=years,
-            y=total_exports,
-            mode='lines+markers',
-            name=f'Total Export Value ({data_type.title()})',
-            line=dict(width=3, color='#1f77b4'),
-            marker=dict(size=8)
-        ))
-        
-        fig.update_layout(
-            title=f'Export Trend Over Time - {data_type.title()}',
-            xaxis_title='Year',
-            yaxis_title='Export Value (USD)',
-            hovermode='x unified',
-            showlegend=False
-        )
-        
-        return fig
-    else:
-        # Matplotlib fallback
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(years, total_exports, marker='o', linewidth=3, markersize=8, color='#1f77b4')
-        ax.set_title(f'Export Trend Over Time - {data_type.title()}')
-        ax.set_xlabel('Year')
-        ax.set_ylabel('Export Value (USD)')
-        ax.grid(True, alpha=0.3)
-        return fig
+    trend_df = pd.DataFrame(list(trend_data.items()), columns=['Year', 'Export_Value'])
+    trend_df = trend_df.set_index('Year')
+    
+    st.subheader(f'Export Trend Over Time - {data_type.title()}')
+    st.line_chart(trend_df)
+    
+    return trend_df
 
-def create_top_items_chart(data, value_col, label_col, title, top_n=10):
-    """Create horizontal bar chart for top items"""
+def create_data_table(data, value_col, label_col, title, top_n=10):
+    """Create formatted data table"""
     top_data = data.nlargest(top_n, value_col)
     
-    if PLOTLY_AVAILABLE:
-        fig = px.bar(
-            top_data,
-            x=value_col,
-            y=label_col,
-            orientation='h',
-            title=title,
-            color=value_col,
-            color_continuous_scale='viridis'
-        )
-        
-        fig.update_layout(
-            yaxis={'categoryorder': 'total ascending'},
-            showlegend=False,
-            height=500
-        )
-        
-        return fig
-    else:
-        # Matplotlib fallback
-        fig, ax = plt.subplots(figsize=(12, 8))
-        bars = ax.barh(top_data[label_col], top_data[value_col], color='#1f77b4')
-        ax.set_title(title)
-        ax.set_xlabel('Export Value (USD)')
-        
-        # Add value labels on bars
-        for i, bar in enumerate(bars):
-            width = bar.get_width()
-            ax.text(width, bar.get_y() + bar.get_height()/2, 
-                   f'{width:,.0f}', ha='left', va='center')
-        
-        plt.tight_layout()
-        return fig
+    # Format the data for display
+    display_data = top_data[[label_col, value_col]].copy()
+    display_data[value_col] = display_data[value_col].apply(lambda x: f"${x:,.0f}M")
+    display_data.columns = [label_col.replace('_', ' ').title(), 'Export Value']
+    
+    st.subheader(title)
+    st.dataframe(display_data, use_container_width=True)
+    
+    return display_data
 
-def create_pie_chart(data, values_col, names_col, title, top_n=10):
-    """Create pie chart for distribution"""
-    top_data = data.nlargest(top_n, values_col)
-    
-    if PLOTLY_AVAILABLE:
-        fig = px.pie(
-            top_data,
-            values=values_col,
-            names=names_col,
-            title=title,
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        return fig
+def format_number(num):
+    """Format large numbers with appropriate suffixes"""
+    if num >= 1e9:
+        return f"${num/1e9:.1f}B"
+    elif num >= 1e6:
+        return f"${num/1e6:.1f}M"
+    elif num >= 1e3:
+        return f"${num/1e3:.1f}K"
     else:
-        # Matplotlib fallback
-        fig, ax = plt.subplots(figsize=(10, 8))
-        ax.pie(top_data[values_col], labels=top_data[names_col], autopct='%1.1f%%', startangle=90)
-        ax.set_title(title)
-        return fig
+        return f"${num:.0f}"
 
-def create_world_map(df_country):
-    """Create world map visualization"""
-    if not PLOTLY_AVAILABLE or not PYCOUNTRY_AVAILABLE:
-        st.warning("World map requires plotly and pycountry libraries")
-        return None
-        
-    # Add ISO codes
-    df_country['iso_a3'] = df_country['country'].apply(get_iso_a3)
-    df_map = df_country.dropna(subset=['iso_a3'])
-    
-    fig = px.choropleth(
-        df_map,
-        locations="iso_a3",
-        color="export_value_2024",
-        hover_name="country",
-        hover_data={"export_value_2024": ":,.0f"},
-        color_continuous_scale="plasma",
-        title="Export Distribution by Country (2024)"
-    )
-    
-    fig.update_layout(
-        geo=dict(showframe=False, showcoastlines=True),
-        height=500
-    )
-    
-    return fig
+def calculate_growth_rate(current, previous):
+    """Calculate growth rate between two periods"""
+    if previous == 0 or pd.isna(previous) or pd.isna(current):
+        return 0
+    return ((current - previous) / previous) * 100
 
 def main():
     # Header
@@ -313,18 +189,18 @@ def main():
     # Analysis type selection
     analysis_type = st.sidebar.radio(
         "Select Analysis Type",
-        ["Overview", "Commodity Analysis", "Country Analysis", "Comparative Analysis"]
+        ["📊 Overview", "🏭 Commodity Analysis", "🌍 Country Analysis", "⚖️ Comparative Analysis"]
     )
     
     # Additional filters based on analysis type
-    if analysis_type == "Commodity Analysis":
+    if analysis_type == "🏭 Commodity Analysis":
         top_n_commodities = st.sidebar.slider("Number of Top Commodities", 5, 20, 10)
         commodity_filter = st.sidebar.multiselect(
             "Filter by Commodity",
             options=df_commodity['description'].unique()[:20],
             default=[]
         )
-    elif analysis_type == "Country Analysis":
+    elif analysis_type == "🌍 Country Analysis":
         top_n_countries = st.sidebar.slider("Number of Top Countries", 5, 20, 10)
         country_filter = st.sidebar.multiselect(
             "Filter by Country",
@@ -333,7 +209,7 @@ def main():
         )
     
     # Main content based on analysis type
-    if analysis_type == "Overview":
+    if analysis_type == "📊 Overview":
         st.header("📈 Export Overview")
         
         # Key metrics
@@ -345,7 +221,7 @@ def main():
             total_commodity_export = df_commodity[current_year_col].sum() if current_year_col in df_commodity.columns else 0
             st.metric(
                 "Total Commodity Export",
-                f"${total_commodity_export:,.0f}M",
+                format_number(total_commodity_export),
                 delta=None
             )
         
@@ -353,7 +229,7 @@ def main():
             total_country_export = df_country[current_year_col].sum() if current_year_col in df_country.columns else 0
             st.metric(
                 "Total Country Export",
-                f"${total_country_export:,.0f}M",
+                format_number(total_country_export),
                 delta=None
             )
         
@@ -369,29 +245,37 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            commodity_trend = create_trend_chart(df_commodity, "commodity")
-            if PLOTLY_AVAILABLE:
-                st.plotly_chart(commodity_trend, use_container_width=True)
-            else:
-                st.pyplot(commodity_trend)
+            create_streamlit_line_chart(df_commodity, "commodity")
         
         with col2:
-            country_trend = create_trend_chart(df_country, "country")
-            if PLOTLY_AVAILABLE:
-                st.plotly_chart(country_trend, use_container_width=True)
-            else:
-                st.pyplot(country_trend)
+            create_streamlit_line_chart(df_country, "country")
         
-        # World map
-        st.header("🗺️ Global Export Distribution")
-        world_map = create_world_map(df_country)
-        if world_map:
-            if PLOTLY_AVAILABLE:
-                st.plotly_chart(world_map, use_container_width=True)
-            else:
-                st.pyplot(world_map)
+        # Top performers overview
+        st.header("🏆 Top Performers Overview")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if current_year_col in df_commodity.columns:
+                create_data_table(
+                    df_commodity,
+                    current_year_col,
+                    'description',
+                    f"Top 5 Commodities ({selected_year})",
+                    5
+                )
+        
+        with col2:
+            if current_year_col in df_country.columns:
+                create_data_table(
+                    df_country,
+                    current_year_col,
+                    'country',
+                    f"Top 5 Countries ({selected_year})",
+                    5
+                )
     
-    elif analysis_type == "Commodity Analysis":
+    elif analysis_type == "🏭 Commodity Analysis":
         st.header("🏭 Commodity Export Analysis")
         
         # Filter data if needed
@@ -403,43 +287,57 @@ def main():
         
         # Top commodities chart
         if current_year_col in filtered_df.columns:
-            top_commodities_chart = create_top_items_chart(
-                filtered_df,
-                current_year_col,
-                'description',
-                f'Top {top_n_commodities} Commodities Export ({selected_year})',
-                top_n_commodities
-            )
-            if PLOTLY_AVAILABLE:
-                st.plotly_chart(top_commodities_chart, use_container_width=True)
-            else:
-                st.pyplot(top_commodities_chart)
-            
-            # Pie chart
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns([2, 1])
             
             with col1:
-                pie_chart = create_pie_chart(
+                create_streamlit_bar_chart(
                     filtered_df,
                     current_year_col,
                     'description',
-                    f'Export Distribution by Commodity ({selected_year})',
+                    f'Top {top_n_commodities} Commodities Export ({selected_year})',
                     top_n_commodities
                 )
-                if PLOTLY_AVAILABLE:
-                    st.plotly_chart(pie_chart, use_container_width=True)
-                else:
-                    st.pyplot(pie_chart)
             
             with col2:
-                # Data table
-                st.subheader(f"Top {top_n_commodities} Commodities Data")
-                top_data = filtered_df.nlargest(top_n_commodities, current_year_col)[
-                    ['description', current_year_col, 'role_percentage_2024']
-                ].round(2)
-                st.dataframe(top_data, use_container_width=True)
+                # Summary statistics
+                st.subheader("📊 Summary Statistics")
+                total_export = filtered_df[current_year_col].sum()
+                avg_export = filtered_df[current_year_col].mean()
+                max_export = filtered_df[current_year_col].max()
+                
+                st.metric("Total Export", format_number(total_export))
+                st.metric("Average Export", format_number(avg_export))
+                st.metric("Highest Export", format_number(max_export))
+            
+            # Detailed data table
+            create_data_table(
+                filtered_df,
+                current_year_col,
+                'description',
+                f"Detailed Commodity Data ({selected_year})",
+                top_n_commodities
+            )
+            
+            # Market share analysis
+            st.subheader("📈 Market Share Analysis")
+            top_data = filtered_df.nlargest(top_n_commodities, current_year_col)
+            
+            # Calculate market share
+            total_market = filtered_df[current_year_col].sum()
+            market_share_data = []
+            
+            for _, row in top_data.iterrows():
+                share = (row[current_year_col] / total_market) * 100
+                market_share_data.append({
+                    'Commodity': row['description'],
+                    'Export Value': format_number(row[current_year_col]),
+                    'Market Share (%)': f"{share:.1f}%"
+                })
+            
+            market_df = pd.DataFrame(market_share_data)
+            st.dataframe(market_df, use_container_width=True)
     
-    elif analysis_type == "Country Analysis":
+    elif analysis_type == "🌍 Country Analysis":
         st.header("🌍 Country Export Analysis")
         
         # Filter data if needed
@@ -451,64 +349,95 @@ def main():
         
         # Top countries chart
         if current_year_col in filtered_df.columns:
-            top_countries_chart = create_top_items_chart(
-                filtered_df,
-                current_year_col,
-                'country',
-                f'Top {top_n_countries} Export Destinations ({selected_year})',
-                top_n_countries
-            )
-            if PLOTLY_AVAILABLE:
-                st.plotly_chart(top_countries_chart, use_container_width=True)
-            else:
-                st.pyplot(top_countries_chart)
-            
-            # Pie chart and world map
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns([2, 1])
             
             with col1:
-                pie_chart = create_pie_chart(
+                create_streamlit_bar_chart(
                     filtered_df,
                     current_year_col,
                     'country',
-                    f'Export Distribution by Country ({selected_year})',
+                    f'Top {top_n_countries} Export Destinations ({selected_year})',
                     top_n_countries
                 )
-                if PLOTLY_AVAILABLE:
-                    st.plotly_chart(pie_chart, use_container_width=True)
-                else:
-                    st.pyplot(pie_chart)
             
             with col2:
-                # Data table
-                st.subheader(f"Top {top_n_countries} Countries Data")
-                top_data = filtered_df.nlargest(top_n_countries, current_year_col)[
-                    ['country', current_year_col, 'role_percentage_2024']
-                ].round(2)
-                st.dataframe(top_data, use_container_width=True)
+                # Summary statistics
+                st.subheader("📊 Summary Statistics")
+                total_export = filtered_df[current_year_col].sum()
+                avg_export = filtered_df[current_year_col].mean()
+                max_export = filtered_df[current_year_col].max()
+                
+                st.metric("Total Export", format_number(total_export))
+                st.metric("Average Export", format_number(avg_export))
+                st.metric("Highest Export", format_number(max_export))
+            
+            # Regional analysis
+            st.subheader("🗺️ Regional Distribution")
+            
+            # Simple regional grouping (you can expand this)
+            regional_mapping = {
+                'CHINA': 'Asia',
+                'UNITED STATES': 'North America',
+                'INDIA': 'Asia',
+                'SINGAPORE': 'Asia',
+                'MALAYSIA': 'Asia',
+                'THAILAND': 'Asia',
+                'VIETNAM': 'Asia',
+                'PHILIPPINES': 'Asia',
+                'SOUTH KOREA': 'Asia',
+                'JAPAN': 'Asia',
+                'NETHERLANDS': 'Europe',
+                'GERMANY': 'Europe',
+                'ITALY': 'Europe',
+                'SPAIN': 'Europe',
+                'FRANCE': 'Europe',
+                'UNITED KINGDOM': 'Europe',
+                'BRAZIL': 'South America',
+                'ARGENTINA': 'South America',
+                'AUSTRALIA': 'Oceania'
+            }
+            
+            # Add region column
+            filtered_df['region'] = filtered_df['country'].map(regional_mapping).fillna('Other')
+            
+            # Calculate regional totals
+            regional_data = filtered_df.groupby('region')[current_year_col].sum().sort_values(ascending=False)
+            regional_df = pd.DataFrame({'Region': regional_data.index, 'Export Value': regional_data.values})
+            regional_df['Export Value Formatted'] = regional_df['Export Value'].apply(format_number)
+            
+            st.dataframe(regional_df[['Region', 'Export Value Formatted']], use_container_width=True)
+            
+            # Detailed country data
+            create_data_table(
+                filtered_df,
+                current_year_col,
+                'country',
+                f"Detailed Country Data ({selected_year})",
+                top_n_countries
+            )
     
-    elif analysis_type == "Comparative Analysis":
+    elif analysis_type == "⚖️ Comparative Analysis":
         st.header("⚖️ Comparative Analysis")
         
         # Year comparison
-        st.subheader("Year-over-Year Comparison")
+        st.subheader("📅 Year-over-Year Comparison")
         
         if selected_year > 2020:
             prev_year = selected_year - 1
             current_col = f'export_value_{selected_year}'
             prev_col = f'export_value_{prev_year}'
             
-            col1, col2 = st.columns(2)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 if current_col in df_commodity.columns and prev_col in df_commodity.columns:
                     current_total = df_commodity[current_col].sum()
                     prev_total = df_commodity[prev_col].sum()
-                    change = ((current_total - prev_total) / prev_total * 100) if prev_total > 0 else 0
+                    change = calculate_growth_rate(current_total, prev_total)
                     
                     st.metric(
                         f"Commodity Export ({selected_year})",
-                        f"${current_total:,.0f}M",
+                        format_number(current_total),
                         f"{change:+.1f}% vs {prev_year}"
                     )
             
@@ -516,42 +445,104 @@ def main():
                 if current_col in df_country.columns and prev_col in df_country.columns:
                     current_total = df_country[current_col].sum()
                     prev_total = df_country[prev_col].sum()
-                    change = ((current_total - prev_total) / prev_total * 100) if prev_total > 0 else 0
+                    change = calculate_growth_rate(current_total, prev_total)
                     
                     st.metric(
                         f"Country Export ({selected_year})",
-                        f"${current_total:,.0f}M",
+                        format_number(current_total),
                         f"{change:+.1f}% vs {prev_year}"
                     )
+            
+            with col3:
+                # Growth rate analysis
+                if current_col in df_commodity.columns and prev_col in df_commodity.columns:
+                    growth_commodities = df_commodity[df_commodity[current_col] > df_commodity[prev_col]]
+                    st.metric("Growing Commodities", len(growth_commodities))
+            
+            with col4:
+                # Growth rate analysis
+                if current_col in df_country.columns and prev_col in df_country.columns:
+                    growth_countries = df_country[df_country[current_col] > df_country[prev_col]]
+                    st.metric("Growing Markets", len(growth_countries))
         
         # Top performers comparison
-        st.subheader("Top Performers Comparison")
+        st.subheader("🏆 Top Performers Comparison")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("**Top 5 Commodities**")
+            st.write("**🏭 Top 10 Commodities**")
             if f'export_value_{selected_year}' in df_commodity.columns:
-                top_commodities = df_commodity.nlargest(5, f'export_value_{selected_year}')[
+                top_commodities = df_commodity.nlargest(10, f'export_value_{selected_year}')[
                     ['description', f'export_value_{selected_year}']
-                ]
-                st.dataframe(top_commodities, use_container_width=True)
+                ].copy()
+                top_commodities[f'export_value_{selected_year}'] = top_commodities[f'export_value_{selected_year}'].apply(format_number)
+                top_commodities.columns = ['Commodity', 'Export Value']
+                st.dataframe(top_commodities, use_container_width=True, hide_index=True)
         
         with col2:
-            st.write("**Top 5 Countries**")
+            st.write("**🌍 Top 10 Countries**")
             if f'export_value_{selected_year}' in df_country.columns:
-                top_countries = df_country.nlargest(5, f'export_value_{selected_year}')[
+                top_countries = df_country.nlargest(10, f'export_value_{selected_year}')[
                     ['country', f'export_value_{selected_year}']
-                ]
-                st.dataframe(top_countries, use_container_width=True)
+                ].copy()
+                top_countries[f'export_value_{selected_year}'] = top_countries[f'export_value_{selected_year}'].apply(format_number)
+                top_countries.columns = ['Country', 'Export Value']
+                st.dataframe(top_countries, use_container_width=True, hide_index=True)
+        
+        # Trend comparison
+        st.subheader("📈 Multi-Year Trend Comparison")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Commodity trend
+            create_streamlit_line_chart(df_commodity, "Commodity")
+            
+            # Show trend summary
+            years = [2020, 2021, 2022, 2023, 2024]
+            trend_summary = []
+            for year in years:
+                col_name = f'export_value_{year}'
+                if col_name in df_commodity.columns:
+                    total = df_commodity[col_name].sum()
+                    trend_summary.append({'Year': year, 'Total Export': format_number(total)})
+            
+            if trend_summary:
+                trend_df = pd.DataFrame(trend_summary)
+                st.dataframe(trend_df, use_container_width=True, hide_index=True)
+        
+        with col2:
+            # Country trend
+            create_streamlit_line_chart(df_country, "Country")
+            
+            # Show trend summary
+            trend_summary = []
+            for year in years:
+                col_name = f'export_value_{year}'
+                if col_name in df_country.columns:
+                    total = df_country[col_name].sum()
+                    trend_summary.append({'Year': year, 'Total Export': format_number(total)})
+            
+            if trend_summary:
+                trend_df = pd.DataFrame(trend_summary)
+                st.dataframe(trend_df, use_container_width=True, hide_index=True)
     
     # Footer
     st.markdown("---")
-    st.markdown(
-        "📊 **Indonesia Non-Oil Export Dashboard** | "
-        "Data source: Ministry of Trade, Republic of Indonesia | "
-        "Built with Streamlit & Plotly"
-    )
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown(
+            """
+            <div style='text-align: center'>
+                <p><strong>📊 Indonesia Non-Oil Export Dashboard</strong></p>
+                <p>Data source: Ministry of Trade, Republic of Indonesia</p>
+                <p>Built with ❤️ using Streamlit</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 if __name__ == "__main__":
     main()
